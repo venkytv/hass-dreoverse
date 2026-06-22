@@ -9,6 +9,6 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/dreo-team/hass-dreoverse/issues",
   "quality_scale": "bronze",
-  "requirements": ["pydreo-cloud==1.0.0"],
+  "requirements": ["pydreo-cloud==1.0.0", "websocket-client==1.9.0"],
   "version": "2.2.1"
 }

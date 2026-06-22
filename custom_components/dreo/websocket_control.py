@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
 from urllib.parse import urlencode
 
-from aiohttp import ClientError
+import websocket
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +51,15 @@ async def async_send_control(
     params: dict[str, Any],
 ) -> None:
     """Send raw Dreo control params over the app WebSocket channel."""
+    await hass.async_add_executor_job(_send_control, client, device_id, params)
+
+
+def _send_control(
+    client: Any,
+    device_id: str,
+    params: dict[str, Any],
+) -> None:
+    """Send raw Dreo control params over the app WebSocket channel."""
     access_token = _access_token_from_client(client)
     payload = {
         "deviceSn": device_id,
@@ -59,7 +68,6 @@ async def async_send_control(
         "timestamp": int(time.time() * 1000),
     }
 
-    session = async_get_clientsession(hass)
     last_error: Exception | None = None
     for server in _servers_from_client(client):
         query = urlencode(
@@ -70,14 +78,15 @@ async def async_send_control(
         )
         url = f"wss://wsb-{server}.dreo-tech.com/websocket?{query}"
         try:
-            async with session.ws_connect(
+            ws = websocket.create_connection(
                 url,
                 timeout=WS_TIMEOUT,
-                headers=WS_HEADERS,
-                heartbeat=15,
-            ) as ws:
-                await ws.send_json(payload)
-                reply = await ws.receive(timeout=WS_REPLY_TIMEOUT)
+                header=[f"{key}: {value}" for key, value in WS_HEADERS.items()],
+            )
+            try:
+                ws.settimeout(WS_REPLY_TIMEOUT)
+                ws.send(json.dumps(payload))
+                reply = ws.recv()
                 _LOGGER.debug(
                     "Sent Dreo WebSocket control for %s via %s: %s",
                     device_id,
@@ -90,7 +99,13 @@ async def async_send_control(
                     reply,
                 )
                 return
-        except (ClientError, TimeoutError) as ex:
+            finally:
+                ws.close()
+        except (
+            TimeoutError,
+            OSError,
+            websocket.WebSocketException,
+        ) as ex:
             last_error = ex
             _LOGGER.debug(
                 "Dreo WebSocket control failed for %s via %s",
