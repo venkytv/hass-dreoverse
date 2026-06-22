@@ -34,7 +34,7 @@ PLATFORMS = [
 ]
 
 MODEL_SPEED_RANGE_OVERRIDES = {
-    "DR-HTF007S": [1, 200],
+    "DR-HTF007S": [1, 8],
 }
 
 
