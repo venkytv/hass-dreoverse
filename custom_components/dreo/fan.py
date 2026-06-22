@@ -215,6 +215,8 @@ class DreoFan(DreoEntity, FanEntity):
                         await async_send_control(
                             self.coordinator.hass,
                             self.coordinator.client,
+                            self.coordinator.username,
+                            self.coordinator.password_hash,
                             self._device_id,
                             params,
                         )

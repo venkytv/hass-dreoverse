@@ -1055,6 +1055,8 @@ class DreoDataUpdateCoordinator(DataUpdateCoordinator[DreoDeviceData | None]):
         device_id: str,
         device_type: str,
         model_config: dict[str, Any],
+        username: str | None = None,
+        password_hash: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
@@ -1067,6 +1069,8 @@ class DreoDataUpdateCoordinator(DataUpdateCoordinator[DreoDeviceData | None]):
         self.device_id = device_id
         self.device_type = device_type
         self.model_config = model_config
+        self.username = username
+        self.password_hash = password_hash
         self.data_processor: (
             Callable[[dict[str, Any], dict[str, Any]], DreoDeviceData] | None
         )

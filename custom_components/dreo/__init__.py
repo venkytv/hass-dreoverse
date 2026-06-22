@@ -78,7 +78,9 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: DreoConfigEntry) 
     coordinators: dict[str, DreoDataUpdateCoordinator] = {}
 
     for device in devices:
-        await async_setup_device_coordinator(hass, client, device, coordinators)
+        await async_setup_device_coordinator(
+            hass, client, device, coordinators, username, password
+        )
 
     config_entry.runtime_data = DreoData(client, devices, coordinators)
 
@@ -100,6 +102,8 @@ async def async_setup_device_coordinator(
     client: DreoClient,
     device: dict[str, Any],
     coordinators: dict[str, DreoDataUpdateCoordinator],
+    username: str,
+    password: str,
 ) -> None:
     """Set up coordinator for a single device."""
     device_model = device.get("model")
@@ -123,7 +127,7 @@ async def async_setup_device_coordinator(
         fan_config[DreoFeatureSpec.SPEED_RANGE] = speed_range
 
     coordinator = DreoDataUpdateCoordinator(
-        hass, client, device_id, device_type, model_config
+        hass, client, device_id, device_type, model_config, username, password
     )
 
     if coordinator.data_processor is None:
