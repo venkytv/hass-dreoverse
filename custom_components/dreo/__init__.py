@@ -12,7 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from pydreo.client import DreoClient
 from pydreo.exceptions import DreoBusinessException, DreoException
 
-from .const import DreoEntityConfigSpec
+from .const import DreoEntityConfigSpec, DreoFeatureSpec
 from .coordinator import DreoDataUpdateCoordinator
 
 if TYPE_CHECKING:
@@ -32,6 +32,10 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.SWITCH,
 ]
+
+MODEL_SPEED_RANGE_OVERRIDES = {
+    "DR-HTF007S": [1, 200],
+}
 
 
 @dataclass
@@ -113,6 +117,10 @@ async def async_setup_device_coordinator(
 
     if device_id in coordinators:
         return
+
+    if speed_range := MODEL_SPEED_RANGE_OVERRIDES.get(device_model):
+        fan_config = model_config.setdefault(DreoEntityConfigSpec.FAN_ENTITY_CONF, {})
+        fan_config[DreoFeatureSpec.SPEED_RANGE] = speed_range
 
     coordinator = DreoDataUpdateCoordinator(
         hass, client, device_id, device_type, model_config
