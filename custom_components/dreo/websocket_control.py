@@ -15,18 +15,24 @@ _LOGGER = logging.getLogger(__name__)
 
 WS_TIMEOUT = 10
 WS_REPLY_TIMEOUT = 5
+WS_HEADERS = {
+    "ua": "dreo/2.8.1 (iPhone; iOS 18.0.0; Scale/3.00)",
+    "lang": "en",
+    "accept-encoding": "gzip",
+    "user-agent": "okhttp/4.9.1",
+}
 
 
 class DreoWebSocketControlError(Exception):
     """Raised when a Dreo WebSocket command cannot be sent."""
 
 
-def _server_from_client(client: Any) -> str:
-    """Infer the Dreo WebSocket server region from the pydreo client."""
+def _servers_from_client(client: Any) -> list[str]:
+    """Infer candidate Dreo WebSocket server regions from the pydreo client."""
     endpoint = str(getattr(client, "endpoint", "") or "").lower()
     if "app-api-eu" in endpoint:
-        return "eu"
-    return "us"
+        return ["eu", "us"]
+    return ["us", "eu"]
 
 
 def _access_token_from_client(client: Any) -> str:
@@ -46,14 +52,6 @@ async def async_send_control(
 ) -> None:
     """Send raw Dreo control params over the app WebSocket channel."""
     access_token = _access_token_from_client(client)
-    server = _server_from_client(client)
-    query = urlencode(
-        {
-            "accessToken": access_token,
-            "timestamp": int(time.time() * 1000),
-        }
-    )
-    url = f"wss://wsb-{server}.dreo-tech.com/websocket?{query}"
     payload = {
         "deviceSn": device_id,
         "method": "control",
@@ -62,12 +60,44 @@ async def async_send_control(
     }
 
     session = async_get_clientsession(hass)
-    try:
-        async with session.ws_connect(url, timeout=WS_TIMEOUT) as ws:
-            await ws.send_json(payload)
-            reply = await ws.receive(timeout=WS_REPLY_TIMEOUT)
-            _LOGGER.debug("Sent Dreo WebSocket control for %s: %s", device_id, params)
-            _LOGGER.debug("Dreo WebSocket control reply for %s: %s", device_id, reply)
-    except (ClientError, TimeoutError) as ex:
-        msg = f"Failed to send Dreo WebSocket control for {device_id}"
-        raise DreoWebSocketControlError(msg) from ex
+    last_error: Exception | None = None
+    for server in _servers_from_client(client):
+        query = urlencode(
+            {
+                "accessToken": access_token,
+                "timestamp": int(time.time() * 1000),
+            }
+        )
+        url = f"wss://wsb-{server}.dreo-tech.com/websocket?{query}"
+        try:
+            async with session.ws_connect(
+                url,
+                timeout=WS_TIMEOUT,
+                headers=WS_HEADERS,
+                heartbeat=15,
+            ) as ws:
+                await ws.send_json(payload)
+                reply = await ws.receive(timeout=WS_REPLY_TIMEOUT)
+                _LOGGER.debug(
+                    "Sent Dreo WebSocket control for %s via %s: %s",
+                    device_id,
+                    server,
+                    params,
+                )
+                _LOGGER.debug(
+                    "Dreo WebSocket control reply for %s: %s",
+                    device_id,
+                    reply,
+                )
+                return
+        except (ClientError, TimeoutError) as ex:
+            last_error = ex
+            _LOGGER.debug(
+                "Dreo WebSocket control failed for %s via %s",
+                device_id,
+                server,
+                exc_info=ex,
+            )
+
+    msg = f"Failed to send Dreo WebSocket control for {device_id}"
+    raise DreoWebSocketControlError(msg) from last_error
