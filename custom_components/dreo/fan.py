@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util.percentage import percentage_to_ranged_value
 
 if TYPE_CHECKING:
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
     from . import DreoConfigEntry
 from .const import (
+    DOMAIN,
     DreoDeviceType,
     DreoDirective,
     DreoEntityConfigSpec,
@@ -24,8 +26,13 @@ from .const import (
 )
 from .coordinator import DreoDataUpdateCoordinator, DreoFanDeviceData, DreoHecDeviceData
 from .entity import DreoEntity
+from .websocket_control import DreoWebSocketControlError, async_send_control
 
 _LOGGER = logging.getLogger(__name__)
+
+MODEL_WEBSOCKET_SPEED_CONTROL = {
+    "DR-HTF007S",
+}
 
 
 async def async_setup_entry(
@@ -198,6 +205,26 @@ class DreoFan(DreoEntity, FanEntity):
         if percentage is not None and percentage > 0 and self._speed_range:
             speed = math.ceil(percentage_to_ranged_value(self._speed_range, percentage))
             if speed is not None and speed > 0:
+                if (
+                    self._model in MODEL_WEBSOCKET_SPEED_CONTROL
+                    and preset_mode is None
+                    and oscillate is None
+                ):
+                    params = {"poweron": True, "windlevel": speed}
+                    try:
+                        await async_send_control(
+                            self.coordinator.hass,
+                            self.coordinator.client,
+                            self._device_id,
+                            params,
+                        )
+                    except DreoWebSocketControlError as ex:
+                        raise HomeAssistantError(
+                            translation_domain=DOMAIN,
+                            translation_key=error_translation_key,
+                        ) from ex
+                    await self.coordinator.async_refresh()
+                    return
                 command_params[DreoDirective.SPEED] = speed
 
         if preset_mode is not None:
